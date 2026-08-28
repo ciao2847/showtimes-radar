@@ -1,0 +1,7 @@
+import assert from"node:assert/strict";import test from"node:test";import{matchesSession,validateWatchConfig}from"../src/watch-service.js";import{parseShowtimesSeatLabel,rankSeatGroups,ticketQuantityDelta}from"../src/booking-flow.js";
+test("validates config",()=>{const value=validateWatchConfig({movie:" 粉絲場 ",date:"2026-09-06",quantity:"2",autoOpen:"false"});assert.equal(value.movie,"粉絲場");assert.equal(value.quantity,2);assert.equal(value.autoOpen,false)});
+test("matches special session filters",()=>{assert.equal(matchesSession({movie:"攻殼粉絲場",date:"2026-09-06",time:"14:00",cinema:"大巨蛋秀泰",room:"4DX"},{movie:"攻殼",date:"2026-09-06",cinema:"大巨蛋",room:"4DX"}),true)});
+test("ranks contiguous seats",()=>{const seats=[1,2,4,5].map((number,index)=>({row:"A",number,index}));const result=rankSeatGroups(seats,2);assert.equal(result.length,2);assert.equal(result[1].number,result[0].number+1)});
+test("adjusts from the quantity currently shown by Showtimes",()=>{assert.equal(ticketQuantityDelta(1,3),2);assert.equal(ticketQuantityDelta(3,1),-2);assert.equal(ticketQuantityDelta(2,2),0)});
+test("parses Showtimes numeric seat labels",()=>{assert.deepEqual(parseShowtimesSeatLabel("座位 18排1號"),{row:"18",number:1,label:"18排1號"})});
+test("does not join seats across a physical aisle",()=>{const seats=[{row:"10",number:5,x:720},{row:"10",number:6,x:648},{row:"10",number:7,x:612}];assert.deepEqual(rankSeatGroups(seats,2).map(s=>s.number),[6,7])});
