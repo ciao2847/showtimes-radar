@@ -14,6 +14,7 @@
     "electron": "npm run build && electron .",
     "pack": "npm run build && electron-builder --dir",
     "dist:mac": "npm run build && electron-builder --mac dmg zip",
+    "dist:win": "npm run build && electron-builder --win nsis zip --x64",
     "test": "node --test test/*.test.js"
   },
   "dependencies": { "playwright-core": "^1.62.1", "react": "^19.2.0", "react-dom": "^19.2.0" },
@@ -25,6 +26,8 @@
     "directories": { "output": "release" },
     "files": ["dist/**/*", "electron/**/*", "src/**/*", "package.json"],
     "extraResources": [{ "from": "chrome-extension", "to": "chrome-extension" }],
-    "mac": { "category": "public.app-category.utilities", "target": ["dmg", "zip"] }
+    "mac": { "category": "public.app-category.utilities", "target": ["dmg", "zip"] },
+    "win": { "target": ["nsis", "zip"] },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
   }
 }

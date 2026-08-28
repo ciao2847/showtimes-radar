@@ -38,4 +38,12 @@ npm run dist:mac
 
 產物會放在 `release/`。目前未設定 Apple Developer 簽章；在其他 Mac 首次開啟時，可能需要於 Finder 對 App 按右鍵後選擇「打開」。安裝檔內會附帶 `chrome-extension` 資料夾，但仍須依上方步驟手動載入。
 
+## 建立 Windows 安裝檔
+
+```bash
+npm run dist:win
+```
+
+會建立 Windows x64 的 NSIS 安裝程式與 ZIP 免安裝封裝，產物同樣位於 `release/`。首次使用仍需在 Chrome 手動載入隨附的擴充功能，並保留已登入秀泰的分頁。
+
 建議輪詢間隔至少 10–15 秒。網站 UI 或 API 結構更新後，票種／座位選擇器可能需要調整；正式搶票前請先用一般可售場次測試瀏覽器流程。

@@ -1,5 +1,5 @@
 import { chromium } from "playwright-core";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { existsSync, readFileSync, readlinkSync } from "node:fs";
 import { spawn } from "node:child_process";
 
@@ -8,7 +8,12 @@ let connectedBrowser;
 let manualCdpUrl;
 const profile = resolve(process.env.SHOWTIMES_PROFILE_DIR || ".browser-profile");
 export function browserExecutable() {
-  const paths = process.platform === "darwin" ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"] : process.platform === "win32" ? ["C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"] : ["/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/microsoft-edge"];
+  const windowsRoots = [process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA].filter(Boolean);
+  const windowsPaths = windowsRoots.flatMap((root) => [
+    join(root, "Google", "Chrome", "Application", "chrome.exe"),
+    join(root, "Microsoft", "Edge", "Application", "msedge.exe")
+  ]);
+  const paths = process.platform === "darwin" ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"] : process.platform === "win32" ? windowsPaths : ["/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/microsoft-edge"];
   return paths.find(existsSync);
 }
 
@@ -148,7 +153,12 @@ export function openShowtimesLogin() {
   const url = "https://www.showtimes.com.tw/";
   let child;
   if (process.platform === "darwin") child = spawn("open", ["-a", "Google Chrome", url], { detached: true, stdio: "ignore" });
-  else if (process.platform === "win32") child = spawn("cmd", ["/c", "start", "", "chrome", url], { detached: true, stdio: "ignore", windowsHide: true });
+  else if (process.platform === "win32") {
+    const executablePath = browserExecutable();
+    child = executablePath
+      ? spawn(executablePath, [url], { detached: true, stdio: "ignore", windowsHide: true })
+      : spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore", windowsHide: true });
+  }
   else child = spawn("xdg-open", [url], { detached: true, stdio: "ignore" });
   child.unref();
 }
