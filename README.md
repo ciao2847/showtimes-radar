@@ -26,9 +26,21 @@ npm run electron
 1. 在 Chrome 開啟 `chrome://extensions`。
 2. 開啟右上角「開發人員模式」。
 3. 按「載入未封裝項目」，選擇本專案的 `chrome-extension` 資料夾。
-4. 修改擴充功能程式後，回到這一頁按重新載入。
+4. 確認 `Showtimes Radar Assistant` 已顯示為「已啟用」。
+5. 每當你修改偵測條件、更新篩選、調整電影/日期/影城/時間規則後，都必須回到 `chrome://extensions` 按「重新載入」一次，讓擴充功能套用最新條件。
 
 擴充功能只連線到本機 `http://127.0.0.1:4173`，用來接收雷達命中指令並接管已登入的秀泰分頁。Chrome 不允許一般應用程式靜默安裝本機擴充功能，因此第一次仍需手動載入。
+
+## 登入與購買流程（Showtimes Radar Assistant）
+
+1. 啟動桌面版：`npm run electron`
+2. 在一般 Chrome 登入秀泰，並保留已登入分頁開著。
+3. 進到 `chrome://extensions`，確認 `Showtimes Radar Assistant` 已啟用。
+4. 在 Showtimes Radar 設定條件後，若有更新，必須回到 `chrome://extensions` 按「重新載入」。
+5. 命中場次時，Assistant 會接管秀泰頁面，幫你選票、選位、略過套餐、確認訂單入口。
+6. 最終訂單確認與付款仍由你在秀泰頁面完成。
+
+> 每次重新更新條件，都要重用一次 Showtimes Radar Assistant，讓新條件立即生效。
 
 ## 建立 macOS 安裝檔
 
