@@ -1,0 +1,68 @@
+name: Release installers
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            command: npm run build && npx electron-builder --mac dmg zip --arm64 --x64 --publish never
+          - os: windows-latest
+            platform: windows
+            command: npm run dist:win
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Verify release version
+        shell: bash
+        run: node -e 'if (process.env.GITHUB_REF_NAME !== `v${require("./package.json").version}`) process.exit(1)'
+      - run: npm test
+      - name: Build installers
+        run: ${{ matrix.command }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Package Chrome extension
+        if: matrix.platform == 'mac'
+        run: zip -r release/showtimes-radar-assistant-chrome-extension.zip chrome-extension
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.platform }}
+          path: |
+            release/*.dmg
+            release/*.exe
+            release/*.zip
+          if-no-files-found: error
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          path: installers
+          merge-multiple: true
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" installers/* --verify-tag --title "Showtimes Radar $RELEASE_TAG" --notes "更新官方 API 訂票、座位選擇、票種預載與即時進度。包含 macOS Apple Silicon／Intel DMG、Windows x64 EXE 與 Chrome 擴充功能。更新後請重新載入 Chrome 擴充功能。安裝檔未設定程式簽章；實際訂票與付款請於秀泰確認。"

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { FLOW_STEPS } from "../src/progress.js";
 const initial = {
   movie: "",
   date: new Date().toISOString().slice(0, 10),
@@ -7,8 +8,6 @@ const initial = {
   room: "",
   ticketKeyword: "全票",
   quantity: "2",
-  seatPreference: "middleBack",
-  preferAisle: false,
   startAt: "",
   pollIntervalSeconds: "15",
   autoOpen: true,
@@ -32,14 +31,53 @@ function Field({ label, children }) {
     </label>
   );
 }
+function FlowProgress({ status }) {
+  const progress = status.progress;
+  const current = FLOW_STEPS.findIndex(step => step.id === progress?.step);
+  const time = value => new Date(value).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour12: false });
+  return (
+    <div className="my-5 border border-line bg-[#17121e] p-4">
+      <div className="mb-4 flex items-center justify-between gap-3 text-xs">
+        <b>執行進度</b>
+        <span className={progress?.status === "error" ? "text-red-400" : "text-acid"}>
+          {progress?.status === "error" ? "需要處理" : progress?.status === "paused" ? "已停止監看" : progress?.step === "confirm" ? "座位已保留" : status.running || status.bookingActive ? "執行中" : "尚未開始"}
+        </span>
+      </div>
+      <ol className="grid grid-cols-3 gap-2 max-sm:grid-cols-2" aria-label="訂票流程">
+        {FLOW_STEPS.map((step, index) => {
+          const active = index === current;
+          const done = index < current;
+          const failed = active && progress?.status === "error";
+          return <li key={step.id} aria-current={active ? "step" : undefined} className={`flex items-center gap-2 border p-2 text-xs ${failed ? "border-red-400 bg-red-400/10 text-red-300" : active ? "border-acid bg-acid/10 text-acid" : done ? "border-green-400/30 text-green-300" : "border-line text-muted"}`}>
+            <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${active && progress?.status === "working" ? "animate-pulse" : ""}`}>{failed ? "!" : done ? "✓" : index + 1}</span>
+            {step.label}
+          </li>;
+        })}
+      </ol>
+      <p role="status" aria-live="polite" className={`mt-4 text-sm ${progress?.status === "error" ? "text-red-300" : "text-acid"}`}>{progress?.message || "設定名稱與張數後開始監看"}</p>
+      {status.running && status.nextCheckAt && !status.bookingActive && <p className="mt-2 text-xs text-muted">下次掃描 {time(status.nextCheckAt)}</p>}
+      {!!status.progressLog?.length && <details open className="mt-4 text-xs text-muted">
+        <summary className="cursor-pointer">執行紀錄（{status.progressLog.length}）</summary>
+        <ol className="mt-3 grid max-h-48 gap-2 overflow-auto">
+          {[...status.progressLog].reverse().map((entry, index) => <li key={`${entry.updatedAt}-${index}`} className={entry.status === "error" ? "text-red-300" : ""}><time>{time(entry.updatedAt)}</time> · {entry.message}</li>)}
+        </ol>
+      </details>}
+    </div>
+  );
+}
 export default function App() {
+  const statusRequest = useRef(0);
+  const statusUpdating = useRef(false);
   const [form, setForm] = useState(initial),
     [status, setStatus] = useState({ matches: [] }),
     [auth, setAuth] = useState({ status: "unknown" }),
     [error, setError] = useState("");
   const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const refresh = async () => {
+    if (statusUpdating.current) return;
+    const request = ++statusRequest.current;
     const [s, a] = await Promise.all([api("/api/status"), api("/api/auth")]);
+    if (request !== statusRequest.current) return;
     setStatus(s);
     setAuth(a);
   };
@@ -51,26 +89,20 @@ export default function App() {
   const start = async (e) => {
     e.preventDefault();
     setError("");
+    ++statusRequest.current;
+    statusUpdating.current = true;
     try {
       setStatus(
         await api("/api/watch", { method: "POST", body: JSON.stringify(form) }),
       );
     } catch (e) {
       setError(e.message);
-    }
+    } finally { statusUpdating.current = false; }
   };
   const stop = async () =>
     setStatus(await api("/api/watch", { method: "DELETE" }));
   const login = async () => {
     await api("/api/auth/login", { method: "POST", body: "{}" });
-    refresh();
-  };
-  const book = async (item) => {
-    setStatus((s) => ({ ...s, bookingStatus: "正在啟動訂票流程" }));
-    await api("/api/book", {
-      method: "POST",
-      body: JSON.stringify({ url: item.url }),
-    });
     refresh();
   };
   return (
@@ -103,18 +135,18 @@ export default function App() {
           特別場，<span className="text-acid">準時出手。</span>
         </h1>
         <p className="mb-10 text-muted">
-          監看秀泰官方特別場，一釋出就通知你並在正常 Chrome 開啟訂票頁。
+          以有票為優先：依名稱查詢場次與空位，空位足夠就自動選票、保留座位，成功後開啟訂單確認。
         </p>
         <div className="grid grid-cols-[.9fr_1.1fr] gap-5 max-lg:grid-cols-1">
           <form onSubmit={start} className="border border-line bg-panel p-7">
             <h2 className="mb-7 text-sm tracking-widest">01 / 目標設定</h2>
-            <Field label="特別場名稱關鍵字">
+            <Field label="特別場名稱搜尋">
               <input
                 required
                 className={`${field} text-lg`}
                 value={form.movie}
                 onChange={(e) => update("movie", e.target.value)}
-                placeholder="例如：攻殼機動隊"
+                placeholder="例如：泥面人"
               />
             </Field>
             <div className="mt-5 grid grid-cols-2 gap-4 max-sm:grid-cols-1">
@@ -151,7 +183,10 @@ export default function App() {
                   placeholder="ULTRA 4DX"
                 />
               </Field>
-              <Field label="張數">
+              <Field label="票種名稱關鍵字">
+                <input className={field} value={form.ticketKeyword} onChange={(e) => update("ticketKeyword", e.target.value)} placeholder="例如：另一個媽咪》DVA特別場套票" />
+              </Field>
+              <Field label="希望張數">
                 <select
                   className={field}
                   value={form.quantity}
@@ -162,18 +197,6 @@ export default function App() {
                       {number} 張
                     </option>
                   ))}
-                </select>
-              </Field>
-              <Field label="座位偏好">
-                <select
-                  className={field}
-                  value={form.seatPreference}
-                  onChange={(e) => update("seatPreference", e.target.value)}
-                >
-                  <option value="middleBack">中後排</option>
-                  <option value="center">正中間</option>
-                  <option value="front">前排</option>
-                  <option value="back">後排</option>
                 </select>
               </Field>
               <Field label="開始監看時間（可留空）">
@@ -199,26 +222,12 @@ export default function App() {
                   ))}
                 </select>
               </Field>
-              <label className="flex items-center gap-3 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.preferAisle}
-                  onChange={(e) => update("preferAisle", e.target.checked)}
-                />
-                優先靠走道
-              </label>
-              <label className="flex items-center gap-3 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.autoOpen}
-                  onChange={(e) => update("autoOpen", e.target.checked)}
-                />
-                命中自動開啟 Chrome
-              </label>
+              <p className="text-sm text-white/60">自動選位已啟用：優先連座，也可分開坐，維持指定張數。排程會提前 8 秒預載票種，開始時間到才會自動訂票。</p>
+
             </div>
             <div className="mt-7 flex gap-3">
               <button className="flex-1 bg-acid px-5 py-4 font-black text-black">
-                {status.running ? "更新條件" : "開始監看"}
+                {status.running ? "更新條件" : "開始監看並自動選位"}
               </button>
               {status.running && (
                 <button
@@ -239,6 +248,7 @@ export default function App() {
                 {status.checks || 0} 次掃描
               </span>
             </div>
+            <FlowProgress status={status} />
             {!status.config ? (
               <div className="grid flex-1 place-items-center border border-dashed border-line text-center text-muted">
                 設定特別場後啟動監看
@@ -246,17 +256,12 @@ export default function App() {
             ) : (
               <>
                 <div className="border-l-2 border-acid bg-[#211e28] p-5">
-                  <b className="text-xl">{status.config.movie}</b>
+                  <b className="text-xl">{status.config.movie || `節目 ${status.config.programId}`}</b>
                   <p className="mt-2 text-xs text-muted">
                     {status.config.date} · {status.config.cinema || "全部影城"}{" "}
-                    · {status.config.time || "全部時間"}
+                    · {status.config.time || "全部時間"} · 票種：{status.config.ticketKeyword}
                   </p>
                 </div>
-                <p className="py-5 text-sm text-acid">
-                  {status.bookingStatus ||
-                    status.error ||
-                    `${status.running ? "持續掃描中" : "已停止"} · 共 ${status.sessionCount || 0} 個公開特別場`}
-                </p>
                 <div className="grid gap-3 overflow-auto">
                   {status.matches?.map((item) => (
                     <article
@@ -268,15 +273,17 @@ export default function App() {
                         <h3 className="text-sm font-bold">{item.movie}</h3>
                         <p className="text-xs text-muted">
                           {item.date} · {item.cinema} ·{" "}
-                          {item.room || item.format}
+                          {item.room || item.format} · 空位 {item.availableSeats ?? "未知"}
                         </p>
                       </div>
-                      <button
-                        onClick={() => book(item)}
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="ml-auto bg-acid px-4 py-3 text-xs font-black text-black"
                       >
-                        在 Chrome 開啟
-                      </button>
+                        手動開啟秀泰
+                      </a>
                     </article>
                   ))}
                 </div>
@@ -285,8 +292,7 @@ export default function App() {
           </section>
         </div>
         <p className="mt-6 text-center text-[11px] text-muted">
-          不繞過 Turnstile、人機驗證或付款確認；登入、選票、選位與付款皆由你在正常
-          Chrome 完成。請遵守影城規範。
+          不繞過 Turnstile、人機驗證或付款確認；請先在 Chrome 登入；自動選票與保留座位後，由你確認訂單與付款。請遵守影城規範。
         </p>
       </main>
     </div>

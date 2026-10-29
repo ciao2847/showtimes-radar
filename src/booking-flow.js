@@ -1,5 +1,6 @@
+import { getRecentSessionContext } from "./showtimes-api.js";
 import { notifyTicketMatch } from "./browser-session.js";
-import { publishExtensionCommand, waitForExtensionAck } from "./extension-handoff.js";
+import { publishExtensionCommand, waitForExtensionAck, getExtensionCommand } from "./extension-handoff.js";
 let active;
 
 export function parseShowtimesSeatLabel(text) {
@@ -109,19 +110,30 @@ async function selectSeats(page, quantity, preference, preferAisle) {
   await next.click();
   return group.map((s)=>s.label);
 }
-export async function startBooking({ url, movie="秀泰特別場", quantity=1, seatPreference="middleBack", preferAisle=false, onStatus=()=>{}, onResult=()=>{} }) {
+export async function prepareBooking({ url, quantity, ticketKeyword = "全票", watchKey }) {
+  const target = new URL(url);
+  target.searchParams.set("radarQuantity", String(quantity));
+  target.searchParams.set("radarTicketKeyword", ticketKeyword);
+  const command = publishExtensionCommand(target.href, undefined, "prepare", watchKey);
+  if (!await waitForExtensionAck(command.id, 10_000)) return { status: "error", message: "票種預載未完成，命中後會即時查詢" };
+  return getExtensionCommand()?.result;
+}
+export async function startBooking({ url, movie="秀泰特別場", quantity=1, ticketKeyword="全票", watchKey, onStatus=()=>{}, onProgress=()=>{}, onResult=()=>{} }) {
   if(active) return { status:"busy", message:"已有訂票流程進行中" };
   const task={cancelled:false}; active=task;
   try {
-    onStatus("已命中場次，正在交給一般 Chrome");
+    onStatus("已命中場次，正在透過秀泰 API 選票並保留座位");
     const target = new URL(url);
     target.searchParams.set("radarQuantity", String(quantity));
-    target.searchParams.set("radarSeatPreference", seatPreference);
-    target.searchParams.set("radarPreferAisle", String(preferAisle));
-    const command = publishExtensionCommand(target.href);
-    if (!await waitForExtensionAck(command.id)) throw new Error("Chrome 擴充功能沒有回應；請確認已啟用並在 chrome://extensions 重新載入");
+    target.searchParams.set("radarTicketKeyword", ticketKeyword);
+    target.searchParams.delete("radarSeatPreference");
+    target.searchParams.delete("radarPreferAisle");
+    const command = publishExtensionCommand(target.href, getRecentSessionContext(target.pathname.split("/").at(-1)), "book", watchKey);
+    if (!await waitForExtensionAck(command.id, 120_000, onProgress)) throw new Error("API 訂票未於時限內確認；請先檢查秀泰目前訂票及擴充功能狀態");
+    const reply = getExtensionCommand();
+    if (reply?.id !== command.id || reply.result?.status !== "reserved") throw new Error(reply?.result?.message || "API 訂票未確認，請檢查秀泰分頁");
     notifyTicketMatch(movie);
-    const result={status:"manualHandoff",message:"已在一般 Chrome 開啟命中場次，請立即選票、選位並付款",url};
+    const result={status:"reserved",message:reply.result.message,url};
     onStatus(result.message); onResult(result); active=undefined; return result;
   } catch(error) { const result={status:"error",message:error instanceof Error?error.message:String(error)}; onResult(result); active=undefined; return result; }
 }

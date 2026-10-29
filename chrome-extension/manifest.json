@@ -1,16 +1,18 @@
 {
   "manifest_version": 3,
   "name": "Showtimes Radar Assistant",
-  "version": "1.0.0",
-  "description": "接收 Showtimes Radar 設定，在已登入的秀泰分頁選擇票數與座位。",
-  "background": { "service_worker": "background.js" },
-  "permissions": ["tabs", "alarms"],
-  "content_scripts": [
-    {
-      "matches": ["https://www.showtimes.com.tw/ticketing/*"],
-      "js": ["content.js"],
-      "run_at": "document_idle"
-    }
+  "version": "1.0.2",
+  "description": "接收名稱搜尋命中的場次，沿用秀泰登入狀態透過官方 API 選票與保留座位。",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "tabs",
+    "alarms",
+    "scripting"
   ],
-  "host_permissions": ["https://www.showtimes.com.tw/*", "http://127.0.0.1:4173/*"]
+  "host_permissions": [
+    "https://www.showtimes.com.tw/*",
+    "http://127.0.0.1:4173/*"
+  ]
 }

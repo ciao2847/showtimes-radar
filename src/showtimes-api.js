@@ -1,5 +1,11 @@
 export const SITE_URL = "https://www.showtimes.com.tw";
 export const API_URL = "https://capi.showtimes.com.tw/4";
+let latestContext = new Map();
+export function getRecentSessionContext(eventId, now = Date.now()) {
+  const context = latestContext.get(Number(eventId));
+  return context && now >= context.fetchedAt && now - context.fetchedAt < 10_000 ? context : undefined;
+}
+
 
 export function normalizeDate(value) {
   const match = String(value || "").trim().match(/^(?:(\d{4})[-/])?(\d{1,2})[-/](\d{1,2})$/);
@@ -24,6 +30,7 @@ export function parseBootstrap(payload) {
     const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(started).map((part) => [part.type, part.value]));
     return {
       id: event.id,
+      programId: event.programId,
       movie: program.name || `節目 ${event.programId}`,
       date: Number.isNaN(started.valueOf()) ? "" : `${parts.year}-${parts.month}-${parts.day}`,
       time: Number.isNaN(started.valueOf()) ? "" : `${parts.hour}:${parts.minute}`,
@@ -37,8 +44,32 @@ export function parseBootstrap(payload) {
   });
 }
 
+async function fetchPayload(path, fetchImpl) {
+  const response = await fetchImpl(`${API_URL}/${path}`, { cache: "no-store", headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
+  if (!response.ok) throw new Error(`秀泰 API ${path} 回應 ${response.status}`);
+  const body = await response.json();
+  if (body.msg && body.msg !== "ok") throw new Error(`秀泰 API ${path}：${body.msg}`);
+  return body.payload || body;
+}
+
+export function parseSeatsAvailability(payload) {
+  const data = payload?.payload || payload;
+  const counts = data?.seatsAvailability;
+  if (!counts || typeof counts !== "object" || Array.isArray(counts)) throw new Error("秀泰空位 API 資料格式不正確");
+  return Object.fromEntries(Object.entries(counts).filter(([, value]) => Number.isInteger(value) && value >= 0));
+}
+
 export async function fetchSpecialSessions(fetchImpl = fetch) {
-  const response = await fetchImpl(`${API_URL}/app/bootstrap`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
-  if (!response.ok) throw new Error(`秀泰場次 API 回應 ${response.status}`);
-  return parseBootstrap(await response.json());
+  const [bootstrap, availability] = await Promise.all([
+    fetchPayload("app/bootstrap", fetchImpl),
+    fetchPayload("events/seatsAvailability", fetchImpl)
+  ]);
+  const counts = parseSeatsAvailability(availability);
+  const data = bootstrap.payload || bootstrap;
+  const fetchedAt = Date.now();
+  const events = data.events || Object.values(data.eventsForCorporations || {}).flatMap(group => group.events || []);
+  const programs = new Map((data.programs || []).map(program => [program.id, program]));
+  const corporations = new Map((data.corporations || []).map(corporation => [corporation.id, corporation]));
+  latestContext = new Map(events.map(event => [event.id, { event, program: programs.get(event.programId), corporation: corporations.get(event.corporationId), fetchedAt }]));
+  return parseBootstrap(bootstrap).map((session) => ({ ...session, availableSeats: counts[session.id] ?? null }));
 }
