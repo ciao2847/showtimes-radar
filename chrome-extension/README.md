@@ -1,5 +1,7 @@
 # 安裝 Showtimes Radar Assistant
 
+第一次使用可先閱讀 [完整使用者手冊](../docs/USER_GUIDE.md)，依步驟下載桌面版、安裝小幫手並設定監看。
+
 1. 在 Chrome 開啟 `chrome://extensions`。
 2. 開啟右上角「開發人員模式」。
 3. 點「載入未封裝項目」。
