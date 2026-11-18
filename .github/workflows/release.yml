@@ -15,12 +15,10 @@ jobs:
         include:
           - os: macos-latest
             platform: mac
-            command: npm run build && npx electron-builder --mac dmg zip --arm64 --x64 --publish never
           - os: windows-latest
             platform: windows
-            command: npm run dist:win
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,10 +30,49 @@ jobs:
         shell: bash
         run: node -e 'if (process.env.GITHUB_REF_NAME !== `v${require("./package.json").version}`) process.exit(1)'
       - run: npm test
-      - name: Build installers
-        run: ${{ matrix.command }}
+      - name: Build Windows installers
+        if: matrix.platform == 'windows'
+        run: npm run dist:win
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Build signed and notarized macOS installers
+        if: matrix.platform == 'mac'
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variable in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!variable}" ]]; then
+              echo "::error::Missing macOS signing or notarization credential: $variable"
+              exit 1
+            fi
+          done
+          npm run build
+          npx electron-builder --mac dmg zip --arm64 --x64 --publish never \
+            -c.forceCodeSigning=true -c.mac.hardenedRuntime=true -c.dmg.sign=true
+          shopt -s nullglob
+          apps=(release/mac*/*.app)
+          images=(release/*.dmg)
+          if [[ ${#apps[@]} -ne 2 || ${#images[@]} -ne 2 ]]; then
+            echo "::error::Expected an app and DMG for each macOS architecture"
+            exit 1
+          fi
+          for app in "${apps[@]}"; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+            xcrun stapler validate "$app"
+          done
+          for image in "${images[@]}"; do
+            xcrun notarytool submit "$image" --wait --timeout 15m \
+              --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
+            xcrun stapler staple "$image"
+            xcrun stapler validate "$image"
+            hdiutil verify "$image"
+          done
       - name: Package Chrome extension
         if: matrix.platform == 'mac'
         run: zip -r release/showtimes-radar-assistant-chrome-extension.zip chrome-extension
@@ -65,4 +102,4 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$RELEASE_TAG" installers/* --verify-tag --title "Showtimes Radar $RELEASE_TAG" --notes "更新官方 API 訂票、座位選擇、票種預載與即時進度。包含 macOS Apple Silicon／Intel DMG、Windows x64 EXE 與 Chrome 擴充功能。更新後請重新載入 Chrome 擴充功能。安裝檔未設定程式簽章；實際訂票與付款請於秀泰確認。"
+          gh release create "$RELEASE_TAG" installers/* --verify-tag --title "Showtimes Radar $RELEASE_TAG" --notes "macOS 請下載符合電腦晶片的 DMG（Apple Silicon 選檔名含 arm64 的版本，Intel 選檔名未標 arm64 的版本），開啟後將 Showtimes Radar 拖曳到「應用程式」。macOS 安裝檔已簽章並通過 Apple 公證。Windows 請下載 x64 EXE。Chrome 擴充功能請下載、解壓縮，並依專案 README 的步驟載入。"

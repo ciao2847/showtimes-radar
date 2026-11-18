@@ -64,7 +64,21 @@ npm run electron
 npm run dist:mac
 ```
 
-產物會放在 `release/`。目前未設定 Apple Developer 簽章；在其他 Mac 首次開啟時，可能需要於 Finder 對 App 按右鍵後選擇「打開」。安裝檔內會附帶 `chrome-extension` 資料夾，但仍須依上方步驟手動載入。
+本機打包的產物會放在 `release/`，適合開發測試。提供給其他 Mac 使用時，請分享 GitHub Release 的 macOS DMG。Apple Silicon（M 系列）選 `arm64`，Intel 選檔名未標 `arm64` 的 DMG。開啟 DMG 後，把 Showtimes Radar 拖到「應用程式」，再依上方步驟載入 Chrome 擴充功能。
+
+### 從 GitHub 發行 macOS 安裝檔
+
+發行者需加入 Apple Developer Program，並準備含私密金鑰的 Developer ID Application 憑證。到 GitHub 專案的 Settings → Secrets and variables → Actions 新增以下 Repository secrets：
+
+| Secret | 內容 |
+| --- | --- |
+| `MAC_CSC_LINK` | 含私密金鑰的 `.p12` 憑證檔，轉成單行 Base64 |
+| `MAC_CSC_KEY_PASSWORD` | 匯出 `.p12` 時設定的密碼 |
+| `APPLE_ID` | 用於公證的 Apple Account 電子郵件 |
+| `APPLE_APP_SPECIFIC_PASSWORD` | 此帳號產生的 App 專用密碼 |
+| `APPLE_TEAM_ID` | Apple Developer Team ID |
+
+準備好後，推送與 `package.json` 版本一致的 `v<版本>` 標籤，例如 `v1.0.6`。Release installers 工作流程會在兩種 macOS 架構的 App 與 DMG 通過公證驗證後，將安裝檔和 Chrome 擴充功能發佈到 GitHub Release。發行後請從另一台 Mac 下載對應 DMG，實際走一遍安裝和首次開啟流程。
 
 ## 建立 Windows 安裝檔
 

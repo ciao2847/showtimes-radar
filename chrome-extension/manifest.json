@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Showtimes Radar Assistant",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "接收名稱搜尋命中的場次，沿用秀泰登入狀態透過官方 API 選票與保留座位。",
   "background": {
     "service_worker": "background.js"
