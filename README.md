@@ -80,6 +80,12 @@ npm run dist:mac
 
 準備好後，推送與 `package.json` 版本一致的 `v<版本>` 標籤，例如 `v1.0.6`。Release installers 工作流程會在兩種 macOS 架構的 App 與 DMG 通過公證驗證後，將安裝檔和 Chrome 擴充功能發佈到 GitHub Release。發行後請從另一台 Mac 下載對應 DMG，實際走一遍安裝和首次開啟流程。
 
+### 發行免 Apple 會員的 macOS 測試版
+
+推送與 `package.json` 版本相符的測試標籤，例如 `v1.0.6-beta.1`。Release macOS beta 工作流程會驗證臨時簽章與 DMG 完整性，再發布 Apple Silicon 和 Intel 的 DMG 及 Chrome 擴充功能到 GitHub Prerelease。
+
+測試版採用臨時簽章。首次啟動若被阻擋，請到「系統設定 → 隱私權與安全性」，在出現「仍要打開」時確認開啟。
+
 ## 建立 Windows 安裝檔
 
 ```bash

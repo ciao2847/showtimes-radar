@@ -2,7 +2,9 @@ name: Release installers
 
 on:
   push:
-    tags: ['v*.*.*']
+    tags:
+      - 'v*.*.*'
+      - '!v*-beta.*'
 
 permissions:
   contents: read

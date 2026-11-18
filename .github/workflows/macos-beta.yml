@@ -1,0 +1,81 @@
+name: Release macOS beta
+
+on:
+  push:
+    tags: ['v*-beta.*']
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Verify beta tag
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const { version } = JSON.parse(readFileSync("package.json", "utf8"));
+            const match = /^v(.+)-beta\.[1-9][0-9]*$/.exec(process.env.GITHUB_REF_NAME);
+            if (match?.[1] !== version) throw new Error("Beta tag must match package.json");
+          '
+      - run: npm test
+      - run: npm run build
+      - name: Build and verify beta DMGs
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx electron-builder --mac --dir --arm64 --x64 --publish never -c.mac.identity=null
+          mkdir -p beta-installers
+          for arch in arm64 x64; do
+            app_dir="release/mac-$arch"
+            if [[ "$arch" == x64 && ! -d "$app_dir" ]]; then app_dir=release/mac; fi
+            app="$app_dir/Showtimes Radar.app"
+            codesign --force --deep --sign - "$app"
+            codesign --verify --deep --strict --verbose=2 "$app"
+            [[ "$(lipo -archs "$app/Contents/MacOS/Showtimes Radar")" == "$arch" ]]
+            ln -s /Applications "$app_dir/Applications"
+            image="beta-installers/Showtimes-Radar-${GITHUB_REF_NAME#v}-$arch.dmg"
+            hdiutil create -volname "Showtimes Radar" -srcfolder "$app_dir" -format UDZO "$image"
+            hdiutil verify "$image"
+          done
+          zip -r beta-installers/showtimes-radar-assistant-chrome-extension.zip chrome-extension
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-beta-installers
+          path: beta-installers/
+          if-no-files-found: error
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-beta-installers
+          path: beta-installers
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" beta-installers/* --verify-tag --prerelease \
+            --title "Showtimes Radar $GITHUB_REF_NAME" --notes-file - <<'NOTES'
+          這是 macOS 測試版，採用臨時簽章，尚未經 Apple 公證。
+
+          1. Apple Silicon（M 系列）下載 `arm64` DMG，Intel 下載 `x64` DMG。
+          2. 開啟 DMG，把 Showtimes Radar 拖到「應用程式」，再從「應用程式」打開。
+          3. 如果 macOS 阻擋首次開啟，到「系統設定 → 隱私權與安全性」。若有「仍要打開」，可用它確認開啟。
+          4. 下載 Chrome 擴充功能 ZIP，解壓縮後依專案 README 載入。
+          NOTES
