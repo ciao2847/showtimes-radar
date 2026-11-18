@@ -133,7 +133,7 @@ export async function startBooking({ url, movie="秀泰特別場", quantity=1, t
     const reply = getExtensionCommand();
     if (reply?.id !== command.id || reply.result?.status !== "reserved") throw new Error(reply?.result?.message || "API 訂票未確認，請檢查秀泰分頁");
     notifyTicketMatch(movie);
-    const result={status:"reserved",message:reply.result.message,url};
+    const result={status:"reserved",message:reply.result.message,url, ...(typeof reply.result.confirmationReady === "boolean" ? { confirmationReady: reply.result.confirmationReady } : {})};
     onStatus(result.message); onResult(result); active=undefined; return result;
   } catch(error) { const result={status:"error",message:error instanceof Error?error.message:String(error)}; onResult(result); active=undefined; return result; }
 }

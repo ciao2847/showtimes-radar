@@ -29,7 +29,7 @@
     await ticketData(client, config, user, now);
     return { status: "prepared", message: "票種已預先載入，命中後將直接讀取最新座位圖（票種快取有效 15 秒）" };
   }
-  const defaultCart = () => ({ expiredAt: null, userSessionId: "", memberCardNumber: "", memberId: "", invoiceCarrier: "", ticketTypesCount: {}, selectedPackageConcessions: [], selectedConcessions: [], seats: [], vouchers: {}, bankCardTokenType: null, bankCardToken: null, bankCardHash: "", cobrandCardToken: null, secondaryCardToken: null, vistaCoBrandCardNoHash: "", vistaSecondaryCardHash: "", corporation: null, program: null, event: null, ticketTypes: [], concessionTabs: [], finalConcessions: [], finalPrice: 0, concessionsToAdd: [], payment: { amount: 0, type: "linePay" } });
+  const defaultCart = () => ({ expiredAt: null, userSessionId: "", lockedSeatsKey: "", memberCardNumber: "", memberId: "", invoiceCarrier: "", ticketTypesCount: {}, selectedPackageConcessions: [], selectedConcessions: [], seats: [], vouchers: {}, bankCardTokenType: null, bankCardToken: null, bankCardHash: "", cobrandCardToken: null, secondaryCardToken: null, vistaCoBrandCardNoHash: "", vistaSecondaryCardHash: "", corporation: null, program: null, event: null, ticketTypes: [], concessionTabs: [], finalConcessions: [], finalPrice: 0, concessionsToAdd: [], payment: { amount: 0, type: "linePay" } });
 
   async function loadClient() {
     const urls = [...document.querySelectorAll('link[href],script[src]')].map(el => el.href || el.src);
@@ -85,7 +85,9 @@
       finally { timings.push(`${name} ${((performance.now() - begin) / 1000).toFixed(2)} 秒`); }
     };
     const context = config.sessionContext;
-    const freshContext = context?.event?.id === eventId && context.program?.id === context.event.programId && context.corporation?.id === context.event.corporationId && now() >= context.fetchedAt && now() - context.fetchedAt < 10_000;
+    // Raw scan snapshots can omit fields that the official client normalizes.
+    // confirmOrder rejects a missing program.rating (null is valid).
+    const freshContext = context?.program?.rating !== undefined && context?.event?.id === eventId && context.program?.id === context.event.programId && context.corporation?.id === context.event.corporationId && now() >= context.fetchedAt && now() - context.fetchedAt < 10_000;
     onProgress({ step: "tickets", message: freshContext ? "沿用剛掃描的場次，並行取得票種與最新座位圖" : "正在並行取得場次、票種與最新座位圖" });
     // Read-only requests are independent; mutations below remain sequential.
     // Attach handlers to all requests immediately, including on early failure.
@@ -131,6 +133,9 @@
     try {
       onProgress({ step: "lock", message: `正在保留 ${cart.seats.map(seat => seat.displayLabel).join("、")}` });
       await timed("保留座位", () => client.cart.lockSeats(cart));
+      // Match the official TicketingShoppingCartProvider reservation marker.
+      cart.lockedSeatsKey = `${cart.userSessionId}|${cart.seats.map(seat => `${seat.cc}.${seat.a}.${seat.ri}.${seat.ci}`).sort().join("_")}`;
+      storage.setItem(keyFor("cart"), JSON.stringify(cart));
       const apiSeconds = ((performance.now() - started) / 1000).toFixed(2);
       const detectedAt = Date.parse(config.detectedAt);
       const elapsed = Number.isFinite(detectedAt) && now() >= detectedAt ? `；命中至保留 ${((now() - detectedAt) / 1000).toFixed(2)} 秒` : "";

@@ -8,7 +8,7 @@ async function pollRadar() {
     const response = await fetch("http://127.0.0.1:4173/api/extension-command", { cache: "no-store" });
     if (!response.ok) return;
     const command = await response.json();
-    if (!command?.id || command.id <= lastCommandId) return;
+    if (!command?.id || command.acknowledged || command.id <= lastCommandId) return;
     lastCommandId = command.id;
     let result;
     try {
@@ -57,8 +57,29 @@ async function pollRadar() {
       result = output[0]?.result;
       if (!result) throw new Error("秀泰 API 選位未回傳結果，請確認分頁");
       if (result.status === "reserved") {
-        await chrome.tabs.update(target.id, { url: result.url, active: true });
-        if (target.windowId) await chrome.windows.update(target.windowId, { focused: true });
+        try {
+          await chrome.tabs.update(target.id, { url: result.url, active: true });
+          if (target.windowId) await chrome.windows.update(target.windowId, { focused: true });
+          let ready = false;
+          const deadline = Date.now() + 15_000;
+          while (Date.now() < deadline) {
+            const tab = await chrome.tabs.get(target.id);
+            if (tab.status === "complete") {
+              const checks = await chrome.scripting.executeScript({ target: { tabId: target.id }, world: "MAIN", func: () => {
+                const cart = JSON.parse(sessionStorage.getItem(`${location.protocol}//${location.hostname}:${location.port}/cinehub-frontend/cart`) || "null");
+                const marker = cart && `${cart.userSessionId}|${cart.seats.map(seat => `${seat.cc}.${seat.a}.${seat.ri}.${seat.ci}`).sort().join("_")}`;
+                return location.pathname === "/ticketing/cart/confirmOrder" && !!cart?.seats?.length && cart.lockedSeatsKey === marker && /付款|支付/.test(document.body?.innerText || "");
+              } });
+              if (checks[0]?.result === true) { ready = true; break; }
+            }
+            await new Promise(resolve => setTimeout(resolve, 250));
+          }
+          if (!ready) throw new Error("秀泰訂單確認頁未能載入");
+          result.confirmationReady = true;
+        } catch (error) {
+          result.confirmationReady = false;
+          result.message = `API 已回報保留座位，但無法開啟付款確認頁：${error.message}。請保留原秀泰分頁並確認訂單，勿重複訂票`;
+        }
       }
     } catch (error) { result = { status: "error", message: error.message }; }
     await fetch("http://127.0.0.1:4173/api/extension-command/ack", {

@@ -150,3 +150,15 @@ test('changing conditions invalidates scheduled preload before it sends an exten
   assert.equal(preparations, 0);
   service.stop();
 });
+
+test('keeps reserved seats guarded when confirmation page fails and marks confirmation as error', async () => {
+  const service = createWatchService({ prepareBooking: async () => null,
+    startBooking: async () => ({ status: 'reserved', confirmationReady: false, message: '確認頁未能載入，請勿重複訂票' })
+  });
+  await service.book({ url: 'https://www.showtimes.com.tw/ticketing/cart/selectTicketTypes/123' });
+  const state = service.getState();
+  assert.equal(state.bookingActive, true);
+  assert.equal(state.progress.step, 'confirm');
+  assert.equal(state.progress.status, 'error');
+  assert.match(state.progress.message, /確認頁未能載入/);
+});
