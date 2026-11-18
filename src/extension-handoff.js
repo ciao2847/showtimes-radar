@@ -13,10 +13,10 @@ export function publishExtensionCommand(url, sessionContext, kind = "book", watc
 export function getExtensionCommand() { return current; }
 
 export function acknowledgeExtensionCommand(id, result) {
-  if (current?.id === Number(id)) {
+  if (current?.id === Number(id) && !current.acknowledged) {
     current.acknowledged = true;
     current.result = ["reserved", "prepared"].includes(result?.status)
-      ? { status: result.status, message: String(result.message || "API 已保留座位，請確認訂單與付款") }
+      ? { status: result.status, ...(typeof result.confirmationReady === "boolean" ? { confirmationReady: result.confirmationReady } : {}), message: String(result.message || "API 已保留座位，請確認訂單與付款") }
       : { status: "error", message: String(result?.message || "API 訂票失敗") };
   }
   return current;

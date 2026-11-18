@@ -13,7 +13,7 @@ function fixture({ blocked = [], failLock = false, failPrice = false, expired = 
   const calls = [];
   const client = {
     auth: { setBearerToken: () => calls.push('auth') },
-    app: { bootstrap: async () => ({ programs: [{ id: 13084 }], corporations: [{ id: 91 }], eventsForCorporations: { 91: { events: [{ id: 123, status: 'active', programId: 13084, corporationId: 91, startedAt: expired ? '2026-10-29T11:50:00Z' : '2026-10-29T20:00:00Z' }] } } }) },
+    app: { bootstrap: async () => ({ programs: [{ id: 13084, rating: null }], corporations: [{ id: 91 }], eventsForCorporations: { 91: { events: [{ id: 123, status: 'active', programId: 13084, corporationId: 91, startedAt: expired ? '2026-10-29T11:50:00Z' : '2026-10-29T20:00:00Z' }] } } }) },
     ticketTypes: { list: async () => [ticket] },
     seats: { listForEvent: async () => ({ seats: [1, 2, 3, 4].map((ci, i) => ({ cc: 'normal', a: 1, r: 'A', c: String(10 - ci), ri: 0, ci, x: i, y: 0, displayLabel: `A排${10-ci}號`, s: blocked.includes(ci) ? 1 : 0 })) }) },
     cart: {
@@ -32,6 +32,7 @@ test('books directly through APIs and persists cart for official confirmation pa
   assert.deepEqual(f.calls, ['auth', 'create', 'lock', 'price']);
   const cart = JSON.parse(f.storage.getItem(key('cart')));
   assert.equal(cart.finalPrice, 1500);
+  assert.equal(cart.lockedSeatsKey, 'test-session|normal.1.0.1_normal.1.0.2');
   assert.equal(cart.seats.length, 2);
   assert.deepEqual(cart.seats.map(s => s.ci), [1, 2]);
   assert.deepEqual(cart.seats.map(s => s.c), ['9', '8']);
@@ -52,6 +53,7 @@ test('retains session after reservation or pricing failure and never blindly ret
     await assert.rejects(reserve(f.client, { eventId: 123, quantity: 2 }, f.options));
     assert.equal(f.calls.filter(c => c === 'lock').length, 1);
     assert.equal(JSON.parse(f.storage.getItem(key('cart'))).userSessionId, 'test-session');
+    assert.equal(!!JSON.parse(f.storage.getItem(key('cart'))).lockedSeatsKey, mode === 'failPrice');
   }
 });
 test('requires unambiguous eligible ticket type and accepts named packages', () => {
@@ -213,4 +215,20 @@ test('does not reuse ticket data after expiry, account or watch changes', async 
     await globalThis.ShowtimesApiBooking.prepare(f.client, changed, options);
     assert.equal(reads, 2, mode);
   }
+});
+
+test('falls back to official bootstrap when scan snapshot omits program rating required by confirmation page', async () => {
+  const f = fixture();
+  const officialBootstrap = f.client.app.bootstrap;
+  const data = await officialBootstrap();
+  let bootstrapReads = 0;
+  f.client.app.bootstrap = async () => { bootstrapReads++; return officialBootstrap(); };
+  const config = { eventId: 123, quantity: 2, sessionContext: {
+    event: data.eventsForCorporations[91].events[0], program: { id: 13084 }, corporation: data.corporations[0], fetchedAt: f.options.now()
+  } };
+  assert.equal((await reserve(f.client, config, f.options)).status, 'reserved');
+  assert.equal(bootstrapReads, 1);
+  const cart = JSON.parse(f.storage.getItem(key('cart')));
+  assert.equal(Object.hasOwn(cart.program, 'rating'), true);
+  assert.equal(cart.program.rating, null);
 });

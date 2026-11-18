@@ -27,3 +27,18 @@ test('delivers actual extension milestones in order, ignoring stale and unsuppor
   await waitForExtensionAck(command.id, 100, progress => received.push(progress));
   assert.deepEqual(received, [{ step: 'tickets', message: '讀取票種' }, { step: 'lock', message: '保留座位' }]);
 });
+
+test('preserves failed confirmation handoff without losing reserved status', () => {
+  const command = publishExtensionCommand('https://www.showtimes.com.tw/ticketing/cart/selectTicketTypes/123');
+  acknowledgeExtensionCommand(command.id, { status: 'reserved', confirmationReady: false, message: 'API 已保留，但確認頁未能載入' });
+  assert.equal(getExtensionCommand().result.status, 'reserved');
+  assert.equal(getExtensionCommand().result.confirmationReady, false);
+});
+
+test('ignores duplicate acknowledgements so a replay cannot overwrite the original outcome', () => {
+  const command = publishExtensionCommand('https://www.showtimes.com.tw/ticketing/cart/selectTicketTypes/123');
+  acknowledgeExtensionCommand(command.id, { status: 'reserved', confirmationReady: false, message: 'original' });
+  acknowledgeExtensionCommand(command.id, { status: 'reserved', confirmationReady: true, message: 'replayed' });
+  assert.equal(getExtensionCommand().result.message, 'original');
+  assert.equal(getExtensionCommand().result.confirmationReady, false);
+});

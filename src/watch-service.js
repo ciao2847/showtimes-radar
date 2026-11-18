@@ -51,7 +51,7 @@ export function createWatchService(deps = {}) {
       if (!isCurrent() || completed) return;
       completed = true;
       state = { ...state, bookingActive: result.status === "reserved", bookingStatus: result.message, bookingResultStatus: result.status };
-      setProgress(result.status === "reserved" ? "confirm" : state.progress?.step || "connect", result.message, result.status === "reserved" ? "success" : "error");
+      setProgress(result.status === "reserved" ? "confirm" : state.progress?.step || "connect", result.message, result.status === "reserved" && result.confirmationReady !== false ? "success" : "error");
     };
     state = { ...state, bookingActive: true, bookingStatus: "正在連線秀泰", bookingResultStatus: null };
     setProgress("connect", "等待 Chrome 擴充功能接收指令，請保持已登入的秀泰分頁開啟");
