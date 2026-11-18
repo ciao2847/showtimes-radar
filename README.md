@@ -84,7 +84,7 @@ npm run dist:mac
 
 推送與 `package.json` 版本相符的測試標籤，例如 `v1.0.6-beta.1`。Release macOS beta 工作流程會驗證臨時簽章與 DMG 完整性，再發布 Apple Silicon 和 Intel 的 DMG 及 Chrome 擴充功能到 GitHub Prerelease。
 
-測試版採用臨時簽章。首次啟動若被阻擋，請到「系統設定 → 隱私權與安全性」，在出現「仍要打開」時確認開啟。
+測試版採用臨時簽章，尚未經 Apple 公證。若首次開啟顯示「已毀損」或被 macOS 阻擋，關閉提示後立刻到「系統設定 → 隱私權與安全性」，向下找到 Showtimes Radar。若有「仍要打開」，按下後在下一個視窗確認開啟。若沒有這個選項，可向發行者取得經 Apple 公證的版本。
 
 ## 建立 Windows 安裝檔
 

@@ -76,6 +76,6 @@ jobs:
 
           1. Apple Silicon（M 系列）下載 `arm64` DMG，Intel 下載 `x64` DMG。
           2. 開啟 DMG，把 Showtimes Radar 拖到「應用程式」，再從「應用程式」打開。
-          3. 如果 macOS 阻擋首次開啟，到「系統設定 → 隱私權與安全性」。若有「仍要打開」，可用它確認開啟。
+          3. 若首次開啟顯示「已毀損」或被阻擋，關閉提示後立刻到「系統設定 → 隱私權與安全性」，向下找到 Showtimes Radar。若有「仍要打開」，按下後在下一個視窗確認開啟。
           4. 下載 Chrome 擴充功能 ZIP，解壓縮後依專案 README 載入。
           NOTES
